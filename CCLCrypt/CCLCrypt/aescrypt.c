@@ -516,7 +516,7 @@ int decrypt_stream(FILE *infp, FILE *outfp, unsigned char* passwd, int passlen,a
 	
 	//Reserved content read will be drop
 	memset(reservedBuffer,0,sizeof(reservedBuffer));
-	if (bytes_read=(fread(reservedBuffer, 1, 128, infp)) != 128)
+	if ((bytes_read=fread(reservedBuffer, 1, 128, infp)) != 128)
 	{
 	
 		return -1;

@@ -1,6 +1,11 @@
-// CCLCrypt.cpp : 定义 DLL 应用程序的导出函数。
-//
-
+/*
+ *  AES Crypt for windows and linux
+ *  
+ *     Sunzhimin <zhimins#gmail.com>
+ *     http://www.anbei.cc
+ *     这是自由软件，遵循LPGL协议，您可以自由修改、使用、分发，但修改部分请开源。
+ *	   This a free software under LGPL license.
+ */
 #include "stdafx.h"
 #include <stdio.h>
 #include <time.h>

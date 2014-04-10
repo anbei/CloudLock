@@ -53,9 +53,6 @@
     <ClCompile Include="sha256.c">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="zlibfile.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
     <ClCompile Include="base64.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
