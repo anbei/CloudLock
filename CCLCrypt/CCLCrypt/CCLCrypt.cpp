@@ -6,13 +6,23 @@
  *     这是自由软件，遵循LPGL协议，您可以自由修改、使用、分发，但修改部分请开源。
  *	   This a free software under LGPL license.
  */
-#include "stdafx.h"
+//#include "stdafx.h"
 #include <stdio.h>
 #include <time.h>
 #include "base64.h"
 #include "CCLCrypt.h"
 #include <string>
-
+#ifndef WIN32
+#include <unistd.h> // getopt
+#include <iconv.h> // iconv stuff
+#include <langinfo.h> // nl_langinfo
+#include <errno.h> // errno
+#include <stdlib.h>
+#else
+#include <windows.h>
+#include <Wincrypt.h>
+#pragma comment(lib,"crypt32.lib")
+#endif
 #ifndef WIN32
 
 #include <string.h>
@@ -29,6 +39,7 @@ int decrypt_stream(FILE *infp, FILE *outfp, unsigned char* passwd, int passlen,a
 CCLCRYPT_API int CCLCryptFile(const char *infilename,const char* outfilename,unsigned char * passwd,int passwdlen,aescrypt_hdr &aheader)
 {
 	FILE *in,*out;
+	int iRet=0;
 	in=fopen(infilename,"rb");
 	if(in == NULL)
 		return -1;
@@ -39,14 +50,15 @@ CCLCRYPT_API int CCLCryptFile(const char *infilename,const char* outfilename,uns
 		return -1;
 	}
 
-	encrypt_stream(in,out,passwd,passwdlen,aheader);
+	iRet=encrypt_stream(in,out,passwd,passwdlen,aheader);
 	fclose(in);
 	fclose(out);
-	return 0;
+	return iRet;
 }
 CCLCRYPT_API int CCLDecryptFile(const char *infilename,const char* outfilename,unsigned char * passwd,int passwdlen,aescrypt_hdr *aheader)
 {
 	FILE *in,*out;
+	int iRet=0;
 	in=fopen(infilename,"rb");
 	if(in == NULL)
 		return -1;
@@ -57,10 +69,10 @@ CCLCRYPT_API int CCLDecryptFile(const char *infilename,const char* outfilename,u
 		return -1;
 	}
 
-	decrypt_stream(in,out,passwd,passwdlen,aheader);
+	iRet=decrypt_stream(in,out,passwd,passwdlen,aheader);
 	fclose(in);
 	fclose(out);
-	return 0;
+	return iRet;
 }
 
 CCLCRYPT_API std::string CCLCryptStr(const unsigned char *src,int srclen,unsigned char * passwd,int passwdlen)
@@ -143,6 +155,94 @@ CCLCRYPT_API std::string CCLDEcryptStr(string src,unsigned char * passwd,int pas
 
 	return sResult;
 }
+#define MAX_PASSWD_BUF 30
+#define MAX_PASSWD_LEN 30
+CCLCRYPT_API std::string getpasswd(int length)
+{
+
+
+	const char pwchars[] =
+    {
+        '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd',
+        'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r',
+        's', 't', 'u', 'v', 'w', 'x', 'y', 'z', 'A', 'B', 'C', 'D', 'E', 'F',
+        'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T',
+        'U', 'V', 'W', 'X', 'Y', 'Z'
+    };
+
+    FILE *randfp;
+    unsigned char pwtemp[MAX_PASSWD_BUF];
+  
+    int i;
+   
+    
+    if ((length <= 0) || (length > MAX_PASSWD_LEN))
+    {
+        fprintf(stderr, "Invalid password length specified.\n");
+        return "";
+    }
+
+  
+#ifdef WIN32
+	HCRYPTPROV                  hProv;
+	if(!CryptAcquireContext( &hProv,NULL,NULL, PROV_RSA_FULL, 0))
+    {
+        if (GetLastError() == NTE_BAD_KEYSET)
+        {
+            // No default container was found. Attempt to create it.
+            if(!CryptAcquireContext(&hProv,NULL,NULL, PROV_RSA_FULL, CRYPT_NEWKEYSET))
+               
+            {
+               perror("CryptAcquireContext error");
+			   return "";
+            }
+           
+        }
+        
+    }
+	 if (!CryptGenRandom(hProv,MAX_PASSWD_BUF,(BYTE *) pwtemp))
+	 {
+		 return "";
+	 }
+#else
+	  /* Open the device to read random octets */
+    if ((randfp = fopen("/dev/urandom", "r")) == NULL)
+    {
+        perror("Error open /dev/urandom:");
+        return  "";
+    }
+    /* Read random octets */
+	int n;
+    if ((n = fread((char*)pwtemp, 1, MAX_PASSWD_BUF, randfp)) != length)
+    {
+        fprintf(stderr, "Error: Couldn't read from /dev/urandom\n");
+        fclose(randfp);
+        return  "";
+    }
+    fclose(randfp);
+#endif
+    /* Now ensure each octet is uses the defined character set */
+   /* for(i = 0, p = pwtemp; i < length; i++, p++)
+    {
+        *p = pwchars[((int)(*p)) % 62];
+    }
+	strncpy((char*)password,(char*)pwtemp,length);
+	*/
+	string sPass;
+	for(i=0;i<length;i++)
+	{
+		int r=(int)(*(pwtemp+i))%62;
+		sPass+= pwchars[r];
+	}
+#ifdef WIN32
+	CryptReleaseContext(
+        hProv, 
+        0);
+#endif
+    return sPass;
+}
+
+
 // 这是已导出类的构造函数。
 // 这是已导出类的构造函数。
 // 有关类定义的信息，请参阅 CCLCrypt.h

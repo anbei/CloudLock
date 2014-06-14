@@ -17,11 +17,7 @@
  * BUT NOT LIMITED TO, LOSS OF DATA OR DATA BEING RENDERED INACCURATE.
  *
  */
-/**********************************************************************
-Modi by Sunzhimin zhimins#gmail.com http://www.cloudlock.cc
-Add windows support and modi aes header
-2014.04.10
-**********************************************************************/
+
 #include <stdio.h>
 #include <string.h>
 #include <sys/types.h>
@@ -46,18 +42,12 @@ Add windows support and modi aes header
 #include "keyfile.h"
 #include "version.h"
 
-#ifdef DEBUG
-#define DBG fprintf
-#else
-#define DBG
-#endif
-
 /*
  *  encrypt_stream
  *
  *  This function is called to encrypt the open data steam "infp".
  */
-int encrypt_stream(FILE *infp, FILE *outfp, unsigned char* passwd, int passlen,aescrypt_hdr aheader)
+int encrypt_stream(FILE *infp, FILE *outfp, unsigned char* passwd, int passlen)
 {
     aes_context                 aes_ctx;
     sha256_context              sha_ctx;
@@ -77,9 +67,10 @@ int encrypt_stream(FILE *infp, FILE *outfp, unsigned char* passwd, int passlen,a
 	HCRYPTPROV                  hProv;
 #endif
     FILE                        *randfp = NULL;
-//    unsigned char               tag_buffer[256];
+    unsigned char               tag_buffer[256];
 
 
+	int x;
     // Open the source for random data.  Note that while the entropy
     // might be lower with /dev/urandom than /dev/random, it will not
     // fail to produce something.  Also, we're going to hash the result
@@ -129,7 +120,7 @@ int encrypt_stream(FILE *infp, FILE *outfp, unsigned char* passwd, int passlen,a
 			if ((n = fread(buffer, 1, 32, randfp)) != 32)
 #endif
             {
-                DBG(stderr, "Error: Couldn't get random. \n");
+                fprintf(stderr, "Error: Couldn't read from /dev/urandom : %d\n",n);
                 fclose(randfp);
                 return  -1;
             }
@@ -143,31 +134,20 @@ int encrypt_stream(FILE *infp, FILE *outfp, unsigned char* passwd, int passlen,a
 
     // Write an AES signature at the head of the file, along
     // with the AES file format version number.
-   /* buffer[0] = 'A';
+    buffer[0] = 'A';
     buffer[1] = 'E';
-    buffer[2] = 'S';*/
-	strncpy((char*)buffer,"CloudLock",9);
-    buffer[10] = (unsigned char) 0x02;   // Version 2
-	buffer[11]=aheader.bifzip;
-	buffer[12]=0;
-    buffer[13] = '\0';                   // Reserved for version 0
-    if (fwrite(buffer, 1, 13, outfp) != 13)
+    buffer[2] = 'S';
+    buffer[3] = (unsigned char) 0x02;   // Version 2
+    buffer[4] = '\0';                   // Reserved for version 0
+    if (fwrite(buffer, 1, 5, outfp) != 5)
     {
-        DBG(stderr, "Error: Could not write out header data\n");
+        fprintf(stderr, "Error: Could not write out header data\n");
         fclose(randfp);
         return  -1;
     }
 
-	//I do not want to tag
-	//128 byte reserved
-
-	for(j=0;j<128;j++)
-	{
-		if (fwrite("\0", 1, 1, outfp) != 1)
-			return -1;
-	}
     // Write out the CREATED-BY tag
- /*   j = 11 +                   // "CREATED-BY\0"
+    j = 11 +                   // "CREATED-BY\0"
         strlen(PROG_NAME) +    // Program name
         1 +                    // Space
         strlen(PROG_VERSION);  // Program version ID
@@ -202,9 +182,9 @@ int encrypt_stream(FILE *infp, FILE *outfp, unsigned char* passwd, int passlen,a
             return  -1;
         }
     }
-	*/
+
     // Write out the "container" extension
-    /*buffer[0] = '\0';
+    buffer[0] = '\0';
     buffer[1] = (unsigned char) 128;
     if (fwrite(buffer, 1, 2, outfp) != 2)
     {
@@ -221,7 +201,7 @@ int encrypt_stream(FILE *infp, FILE *outfp, unsigned char* passwd, int passlen,a
         fclose(randfp);
         return  -1;
     }
-	
+
     // Write out 0x0000 to indicate that no more extensions exist
     buffer[0] = '\0';
     buffer[1] = '\0';
@@ -231,7 +211,7 @@ int encrypt_stream(FILE *infp, FILE *outfp, unsigned char* passwd, int passlen,a
         fclose(randfp);
         return  -1;
     }
-	*/
+	
     // We will use an initialization vector comprised of the current time
     // process ID, and random data, all hashed together with SHA-256.
     current_time = time(NULL);
@@ -242,7 +222,7 @@ int encrypt_stream(FILE *infp, FILE *outfp, unsigned char* passwd, int passlen,a
     }
 #ifdef WIN32
 	srand(time(NULL));
-	process_id=rand();
+	process_id=100;
 #else
 	process_id = getpid();
 #endif
@@ -264,7 +244,7 @@ int encrypt_stream(FILE *infp, FILE *outfp, unsigned char* passwd, int passlen,a
 		if (fread(buffer, 1, 32, randfp) != 32)
 #endif
         {
-            DBG(stderr, "Error: Couldn't read from /dev/random\n");
+            fprintf(stderr, "Error: Couldn't read from /dev/random\n");
             fclose(randfp);
             return  -1;
         }
@@ -288,7 +268,8 @@ int encrypt_stream(FILE *infp, FILE *outfp, unsigned char* passwd, int passlen,a
         return  -1;
     }
 
-	
+	for(x=0;x<16;x++)
+	printf("%c  ",IV[i]);
     // Hash the IV and password 8192 times
     memset(digest, 0, 32);
     memcpy(digest, IV, 16);
@@ -362,7 +343,7 @@ int encrypt_stream(FILE *infp, FILE *outfp, unsigned char* passwd, int passlen,a
     // Write the encrypted block
     if (fwrite(digest, 1, 32, outfp) != 32)
     {
-        DBG(stderr, "Error: Could not write iv_key HMAC\n");
+        fprintf(stderr, "Error: Could not write iv_key HMAC\n");
         return  -1;
     }
 	
@@ -395,7 +376,13 @@ int encrypt_stream(FILE *infp, FILE *outfp, unsigned char* passwd, int passlen,a
 
     // Initialize the last_block_size value to 0
     aeshdr.last_block_size = 0;
+	
+	for(x=0;x<64;x++)
+	{
+		printf("%d %d\n",aes_ctx.drk[x],aes_ctx.erk[x]);
 
+	}
+	printf("%d\n",aes_ctx.nr);
 	
 	
     while ((n = fread(buffer, 1, 16, infp)) > 0)
@@ -435,11 +422,10 @@ int encrypt_stream(FILE *infp, FILE *outfp, unsigned char* passwd, int passlen,a
     }
 
     // Write the file size modulo
-	
     buffer[0] = (char) (aeshdr.last_block_size & 0x0F);
     if (fwrite(buffer, 1, 1, outfp) != 1)
     {
-        DBG(stderr, "Error: Could not write the file size modulo\n");
+        fprintf(stderr, "Error: Could not write the file size modulo\n");
         return  -1;
     }
 
@@ -451,7 +437,7 @@ int encrypt_stream(FILE *infp, FILE *outfp, unsigned char* passwd, int passlen,a
     sha256_finish(&sha_ctx, digest);
     if (fwrite(digest, 1, 32, outfp) != 32)
     {
-        DBG(stderr, "Error: Could not write the file HMAC\n");
+        fprintf(stderr, "Error: Could not write the file HMAC\n");
         return  -1;
     }
 
@@ -468,7 +454,7 @@ int encrypt_stream(FILE *infp, FILE *outfp, unsigned char* passwd, int passlen,a
  *
  *  This function is called to decrypt the open data steam "infp".
  */
-int decrypt_stream(FILE *infp, FILE *outfp, unsigned char* passwd, int passlen,aescrypt_hdr *aheader)
+int decrypt_stream(FILE *infp, FILE *outfp, unsigned char* passwd, int passlen)
 {
     aes_context                 aes_ctx;
     sha256_context              sha_ctx;
@@ -480,16 +466,15 @@ int decrypt_stream(FILE *infp, FILE *outfp, unsigned char* passwd, int passlen,a
     unsigned char               buffer[64], buffer2[32];
     unsigned char               *head, *tail;
     unsigned char               ipad[64], opad[64];
-	unsigned char				reservedBuffer[129];
     int                         reached_eof = 0;
-    
+     int x;
     // Read the file header
     if ((bytes_read = fread(&aeshdr, 1, sizeof(aeshdr), infp)) !=
          sizeof(aescrypt_hdr))
     {
         if (feof(infp))
         {
-            DBG(stderr, "Error: Input file is too short1.\n");
+            fprintf(stderr, "Error: Input file is too short1.\n");
         }
         else
         {
@@ -498,38 +483,26 @@ int decrypt_stream(FILE *infp, FILE *outfp, unsigned char* passwd, int passlen,a
         return  -1;
     }
 
-   /* if (!(aeshdr.aes[0] == 'A' && aeshdr.aes[1] == 'E' &&
-          aeshdr.aes[2] == 'S'))*/
-	if(strncmp(aeshdr.aes,"CloudLock",9)!=0)
+    if (!(aeshdr.aes[0] == 'A' && aeshdr.aes[1] == 'E' &&
+          aeshdr.aes[2] == 'S'))
     {
         fprintf(stderr, "Error: Bad file header (not aescrypt file or is corrupted? [%x, %x, %x])\n", aeshdr.aes[0], aeshdr.aes[1], aeshdr.aes[2]);
         return  -1;
     }
 
     // Validate the version number and take any version-specific actions
-    if (aeshdr.version == 0)
+    if (aeshdr.version !=0x02 )
     {
         // Let's just consider the least significant nibble to determine
         // the size of the last block
-        aeshdr.last_block_size = (aeshdr.last_block_size & 0x0F);
-    }
-    else if (aeshdr.version > 0x02)
-    {
         fprintf(stderr, "Error: Unsupported AES file version: %d\n",
                 aeshdr.version);
-        return  -1;
+		 return -1;
     }
-	memcpy(aheader,&aeshdr,sizeof(aeshdr));
-	//Reserved content read will be drop
-	memset(reservedBuffer,0,sizeof(reservedBuffer));
-	if ((bytes_read=fread(reservedBuffer, 1, 128, infp)) != 128)
-	{
-	
-		return -1;
-	}
-	
+    
+
     // Skip over extensions present v2 and later files
-   /* if (aeshdr.version >= 0x02)
+    if (aeshdr.version >= 0x02)
     {
         do
         {
@@ -564,13 +537,13 @@ int decrypt_stream(FILE *infp, FILE *outfp, unsigned char* passwd, int passlen,a
             }
         } while(j);
     }
-	*/
+
     // Read the initialization vector from the file
     if ((bytes_read = fread(IV, 1, 16, infp)) != 16)
     {
         if (feof(infp))
         {
-            DBG(stderr, "Error: Input file is too short.6\n");
+            fprintf(stderr, "Error: Input file is too short.6\n");
         }
         else
         {
@@ -578,7 +551,8 @@ int decrypt_stream(FILE *infp, FILE *outfp, unsigned char* passwd, int passlen,a
         }
         return  -1;
     }
-	
+	for(x=0;x<16;x++)
+	printf("%c  ",IV[i]);
     // Hash the IV and password 8192 times
     memset(digest, 0, 32);
     memcpy(digest, IV, 16);
@@ -621,7 +595,7 @@ int decrypt_stream(FILE *infp, FILE *outfp, unsigned char* passwd, int passlen,a
             {
                 if (feof(infp))
                 {
-                    DBG(stderr, "Error: Input file is too short.7\n");
+                    fprintf(stderr, "Error: Input file is too short.7\n");
                 }
                 else
                 {
@@ -657,7 +631,7 @@ int decrypt_stream(FILE *infp, FILE *outfp, unsigned char* passwd, int passlen,a
         {
             if (feof(infp))
             {
-                DBG(stderr, "Error: Input file is too short.8\n");
+                fprintf(stderr, "Error: Input file is too short.8\n");
             }
             else
             {
@@ -666,10 +640,9 @@ int decrypt_stream(FILE *infp, FILE *outfp, unsigned char* passwd, int passlen,a
             return  -1;
         }
 
-		//alert,this may be cause a bruce force attack
         if (memcmp(digest, buffer, 32))
         {
-            DBG(stderr, "Error: Message has been altered or password is incorrect 9\n");
+            fprintf(stderr, "Error: Message has been altered or password is incorrect 9\n");
             return  -1;
         }
 
@@ -700,7 +673,12 @@ int decrypt_stream(FILE *infp, FILE *outfp, unsigned char* passwd, int passlen,a
         sha256_update(&sha_ctx, ipad, 64);
     }
    
-	
+	for(x=0;x<64;x++)
+	{
+		printf("%d %d\n",aes_ctx.drk[x],aes_ctx.erk[x]);
+
+	}
+	printf("%d\n",aes_ctx.nr);
     // Decrypt the balance of the file
 
     // Attempt to initialize the ring buffer with contents from the file.
@@ -717,8 +695,7 @@ int decrypt_stream(FILE *infp, FILE *outfp, unsigned char* passwd, int passlen,a
             // If there are less than 48 octets, the only valid count
             // is 32 for version 0 (HMAC) and 33 for version 1 or
             // greater files ( file size modulo + HMAC)
-            if ((aeshdr.version == 0x00 && bytes_read != 32) ||
-                (aeshdr.version >= 0x01 && bytes_read != 33))
+            if (aeshdr.version >= 0x01 && bytes_read != 33)
             {
                 fprintf(stderr, "Error: Input file is corrupt (1:%d).\n",
                         bytes_read);
@@ -734,13 +711,12 @@ int decrypt_stream(FILE *infp, FILE *outfp, unsigned char* passwd, int passlen,a
                     // The first octet must be the indicator of the
                     // last block size.
                     aeshdr.last_block_size = (buffer[0] & 0x0F);
-					//printf("decry:lastblocksize %d\n",aeshdr.last_block_size);
                 }
                 // If this initial read indicates there is no encrypted
                 // data, then there should be 0 in the last_block_size field
                 if (aeshdr.last_block_size != 0)
                 {
-                    DBG(stderr, "Error: Input file is corrupt (2).\n");
+                    fprintf(stderr, "Error: Input file is corrupt (2).\n");
                     return -1;
                 }
             }
@@ -768,13 +744,14 @@ int decrypt_stream(FILE *infp, FILE *outfp, unsigned char* passwd, int passlen,a
             else
             {
                 // The last block for v0 must be 16 and for v1 it must be 1
-                if ((aeshdr.version == 0x00 && bytes_read > 0) ||
-                    (aeshdr.version >= 0x01 && bytes_read != 1))
+				//error
+              /*  if ((aeshdr.version >= 0x01 && bytes_read != 1))
                 {
-                    DBG(stderr, "Error: Input file is corrupt (3:%d).\n",
+                    fprintf(stderr, "Error: Input file is corrupt (3:%d).\n",
                             bytes_read);
                     return -1;
                 }
+				*/
 
                 // If this is a v1 file, then the file modulo is located
                 // in the ring buffer at tail + 16 (with consideration
@@ -800,7 +777,7 @@ int decrypt_stream(FILE *infp, FILE *outfp, unsigned char* passwd, int passlen,a
         // Process data that has been read.  Note that if the last
         // read operation returned no additional data, there is still
         // one one ciphertext block for us to process if this is a v0 file.
-        if ((bytes_read > 0) || (aeshdr.version == 0x00))
+        if ((bytes_read > 0) )
         {
             // Advance the head of the buffer forward
             if (bytes_read > 0)
@@ -852,17 +829,7 @@ int decrypt_stream(FILE *infp, FILE *outfp, unsigned char* passwd, int passlen,a
     sha256_finish(&sha_ctx, digest);
 
     // Copy the HMAC read from the file into buffer2
-    if (aeshdr.version == 0x00)
-    {
-        memcpy(buffer2, tail, 16);
-        tail += 16;
-        if (tail == (buffer + 64))
-        {
-            tail = buffer;
-        }
-        memcpy(buffer2+16, tail, 16);
-    }
-    else
+    
     {
         memcpy(buffer2, tail+1, 15);
         tail += 16;
@@ -878,20 +845,20 @@ int decrypt_stream(FILE *infp, FILE *outfp, unsigned char* passwd, int passlen,a
         }
         memcpy(buffer2+31, tail, 1);
     }
-
+	/*
     if (memcmp(digest, buffer2, 32))
     {
         if (aeshdr.version == 0x00)
         {
-            DBG(stderr, "Error: Message has been altered or password is incorrect12\n");
+            fprintf(stderr, "Error: Message has been altered or password is incorrect12\n");
         }
         else
         {
-            DBG(stderr, "Error: Message has been altered and should not be trusted13\n");
+            fprintf(stderr, "Error: Message has been altered and should not be trusted13\n");
         }
 
         return -1;
-    }
+    }*/
 
     return 0;
 }
@@ -949,14 +916,13 @@ void version(const char *progname)
  *
  *  Removes output files that are not fully and properly created.
  */
-/*
 void cleanup(const char *outfile)
 {
     if (strcmp(outfile,"-") && outfile[0] != '\0')
     {
         unlink(outfile);
     }
-}*/
+}
 
 #if 0
 int main(int argc, char *argv[])

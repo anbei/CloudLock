@@ -30,9 +30,16 @@ typedef struct
 }CryptHeader;
 */
 
+//crypt file,aheader can stor some information,include if the file is compressed
 CCLCRYPT_API int CCLCryptFile(const char *infilename,const char* outfilename,unsigned char * passwd,int passwdlen,aescrypt_hdr &aheader);
+//decrypt file,aheader can stor some information,include if the file is compressed
 CCLCRYPT_API int CCLDecryptFile(const char *infilename,const char* outfilename,unsigned char * passwd,int passwdlen,aescrypt_hdr *aheader);
+//ecncrypt string
 CCLCRYPT_API std::string CCLCryptStr(const unsigned char *src,int srclen,unsigned char * passwd,int passwdlen);
+//decrypt string 
 CCLCRYPT_API std::string CCLDEcryptStr(std::string src,unsigned char * passwd,int passwdlen);
-CCLCRYPT_API int compressFile(const char *sourcefile, const char *destfile, int level);
+//get random password
+CCLCRYPT_API std::string getpasswd(int length);
+
+CCLCRYPT_API int compressFile(const char *sourcefile, const char *destfile, int level=-1);
 CCLCRYPT_API int deCompressFile(const char *sourcefile, const char *destfile);
